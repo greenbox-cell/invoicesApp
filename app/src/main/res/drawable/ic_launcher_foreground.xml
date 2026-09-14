@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Invoice sheet -->
+    <path
+        android:fillColor="#F6F1E8"
+        android:pathData="M34,28h32c2.2,0 4,1.8 4,4v44c0,2.2 -1.8,4 -4,4H34c-2.2,0 -4,-1.8 -4,-4V32c0,-2.2 1.8,-4 4,-4z" />
+    <!-- Header bar -->
+    <path
+        android:fillColor="#0A4A3C"
+        android:pathData="M30,32c0,-2.2 1.8,-4 4,-4h32c2.2,0 4,1.8 4,4v10H30V32z" />
+    <!-- Header title stripe -->
+    <path
+        android:fillColor="#F6F1E8"
+        android:pathData="M38,36h20v3H38z" />
+    <!-- Line items -->
+    <path
+        android:fillColor="#0E6B56"
+        android:pathData="M38,50h32v2.5H38z" />
+    <path
+        android:fillColor="#0E6B56"
+        android:pathData="M38,56h24v2.5H38z" />
+    <path
+        android:fillColor="#0E6B56"
+        android:pathData="M38,62h28v2.5H38z" />
+    <!-- Amount highlight -->
+    <path
+        android:fillColor="#0E6B56"
+        android:pathData="M38,70h20v4H38z" />
+</vector>
