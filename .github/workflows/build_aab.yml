@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build-aab:
@@ -34,61 +35,93 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Configure release signing
+      - name: Configure Play upload signing
         env:
+          GH_TOKEN: ${{ github.token }}
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          PLAY_SHA1="0F:DF:FC:AF:28:9C:06:67:51:25:EE:93:B4:B2:F1:A4:BB:88:90:23"
+          PLAY_SHA1="0FDFFCAF289C06675125EE93B4B2F1A4BB889023"
+          PLAY_SHA1_COLONS="0F:DF:FC:AF:28:9C:06:67:51:25:EE:93:B4:B2:F1:A4:BB:88:90:23"
+
+          sha1_of() {
+            keytool -list -v -keystore "$1" -storepass "$2" -alias "$3" 2>/dev/null \
+              | grep -i "SHA1:" \
+              | head -n 1 \
+              | sed -E 's/.*SHA1:\s*//I' \
+              | tr -d '[:space:]' \
+              | tr '[:lower:]' '[:upper:]' \
+              | tr -d ':'
+          }
+
+          write_props() {
+            {
+              echo "storeFile=$1"
+              echo "storePassword=$2"
+              echo "keyAlias=$3"
+              echo "keyPassword=$4"
+            } > keystore.properties
+          }
 
           if [ -n "${KEYSTORE_BASE64}" ] && [ -n "${KEYSTORE_PASSWORD}" ]; then
             echo "${KEYSTORE_BASE64}" | base64 -d > upload-keystore.jks
             ALIAS="${KEY_ALIAS:-upload}"
             KEYPASS="${KEY_PASSWORD:-${KEYSTORE_PASSWORD}}"
-            STOREPASS="${KEYSTORE_PASSWORD}"
-            STOREFILE="upload-keystore.jks"
-            echo "Using GitHub Actions secrets for signing."
-          else
-            STOREFILE="signing/upload-keystore.jks"
-            STOREPASS="mp1234upload"
-            KEYPASS="mp1234upload"
-            ALIAS="upload"
-            echo "Using committed signing/upload-keystore.jks"
+            ACTUAL=$(sha1_of upload-keystore.jks "${KEYSTORE_PASSWORD}" "${ALIAS}")
+            if [ "${ACTUAL}" = "${PLAY_SHA1}" ]; then
+              write_props upload-keystore.jks "${KEYSTORE_PASSWORD}" "${ALIAS}" "${KEYPASS}"
+              echo "Using GitHub secrets keystore (SHA1 matches Play)."
+              echo "SHA1 ${PLAY_SHA1_COLONS}" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Secrets keystore SHA1 ${ACTUAL} does not match Play. Trying original CI artifacts..."
           fi
 
-          {
-            echo "storeFile=${STOREFILE}"
-            echo "storePassword=${STOREPASS}"
-            echo "keyAlias=${ALIAS}"
-            echo "keyPassword=${KEYPASS}"
-          } > keystore.properties
+          download_artifact() {
+            local id="$1"
+            local dest="$2"
+            curl -sS -L \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -o "${dest}" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip"
+            unzip -o -q "${dest}" -d "${dest%.zip}"
+          }
 
-          ACTUAL=$(
-            keytool -list -v -keystore "${STOREFILE}" -storepass "${STOREPASS}" -alias "${ALIAS}" \
-              | grep -i "SHA1:" \
-              | head -n 1 \
-              | sed -E 's/.*SHA1:\s*//I' \
-              | tr -d '[:space:]' \
-              | tr '[:lower:]' '[:upper:]'
-          )
-          PLAY_NORM=$(echo "${PLAY_SHA1}" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
-          echo "Upload certificate SHA1: ${ACTUAL}"
-          echo "Play-registered SHA1:    ${PLAY_NORM}"
+          # First successful CI keystore, then the later generated one.
+          download_artifact 10344321113 first-ks.zip || true
+          download_artifact 10344611500 second-ks.zip || true
 
-          {
-            echo "## Signing"
-            echo "AAB SHA1: \`${ACTUAL}\`"
-            echo "Play expects: \`${PLAY_NORM}\`"
-            if [ "${ACTUAL}" != "${PLAY_NORM}" ]; then
-              echo
-              echo "This AAB will be **rejected by Play** until you reset the upload key."
-              echo "Play Console → App integrity → App signing → Request upload key reset"
-              echo "Upload \`signing/upload_certificate.pem\` from the repo (or the workflow artifact)."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          find first-ks second-ks -iname '*.jks' -o -iname '*.keystore' > ks-candidates.txt || true
+          cat ks-candidates.txt
+
+          MATCH=""
+          while IFS= read -r ks; do
+            [ -f "$ks" ] || continue
+            for pass in invoicesci mp1234upload android; do
+              actual=$(sha1_of "$ks" "$pass" upload || true)
+              echo "Candidate $ks pass=$pass SHA1=$actual"
+              if [ "$actual" = "$PLAY_SHA1" ]; then
+                MATCH="$ks"
+                MATCH_PASS="$pass"
+                break 2
+              fi
+            done
+          done < ks-candidates.txt
+
+          if [ -z "${MATCH}" ]; then
+            echo "::error::Could not find a keystore with Play SHA1 ${PLAY_SHA1_COLONS}."
+            echo "Do not upload an AAB signed with a different key."
+            exit 1
+          fi
+
+          cp "$MATCH" play-upload-keystore.jks
+          write_props play-upload-keystore.jks "$MATCH_PASS" upload "$MATCH_PASS"
+          echo "Using $MATCH (password matched). SHA1 ${PLAY_SHA1_COLONS}"
+          echo "Signed with Play upload key ${PLAY_SHA1_COLONS}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build release AAB
         run: ./gradlew bundleRelease --no-daemon --stacktrace
@@ -111,13 +144,5 @@ jobs:
         with:
           name: invoices-release-aab
           path: app/build/outputs/bundle/release/*.aab
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload Play upload certificate (PEM)
-        uses: actions/upload-artifact@v4
-        with:
-          name: play-upload-certificate-pem
-          path: signing/upload_certificate.pem
           if-no-files-found: error
           retention-days: 14
