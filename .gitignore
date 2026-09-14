@@ -15,11 +15,12 @@ captures/
 *.ap_
 *.dex
 
-# Signing (never commit real secrets)
+# Signing (never commit keystore.properties; the CI upload keystore is committed on purpose)
 keystore.properties
 *.jks
 *.keystore
 !debug.keystore
+!signing/upload-keystore.jks
 
 # OS / misc
 Thumbs.db

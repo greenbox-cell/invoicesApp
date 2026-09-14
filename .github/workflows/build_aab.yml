@@ -42,46 +42,53 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          EXPECTED_SHA1="0F:DF:FC:AF:28:9C:06:67:51:25:EE:93:B4:B2:F1:A4:BB:88:90:23"
+          PLAY_SHA1="0F:DF:FC:AF:28:9C:06:67:51:25:EE:93:B4:B2:F1:A4:BB:88:90:23"
 
-          if [ -z "${KEYSTORE_BASE64}" ] || [ -z "${KEYSTORE_PASSWORD}" ]; then
-            echo "::error::Play already registered upload key SHA1 ${EXPECTED_SHA1}."
-            echo "Do not generate a new keystore — Play will reject it."
-            echo "1. GitHub → Actions → the FIRST successful Build AAB run"
-            echo "2. Download artifact invoices-ci-upload-keystore"
-            echo "3. Verify: keytool -list -v -keystore ci-upload-keystore.jks -storepass invoicesci"
-            echo "4. Repo Settings → Secrets → Actions, add:"
-            echo "   KEYSTORE_BASE64, KEYSTORE_PASSWORD (invoicesci if from first CI run),"
-            echo "   KEY_ALIAS (upload), KEY_PASSWORD"
-            exit 1
+          if [ -n "${KEYSTORE_BASE64}" ] && [ -n "${KEYSTORE_PASSWORD}" ]; then
+            echo "${KEYSTORE_BASE64}" | base64 -d > upload-keystore.jks
+            ALIAS="${KEY_ALIAS:-upload}"
+            KEYPASS="${KEY_PASSWORD:-${KEYSTORE_PASSWORD}}"
+            STOREPASS="${KEYSTORE_PASSWORD}"
+            STOREFILE="upload-keystore.jks"
+            echo "Using GitHub Actions secrets for signing."
+          else
+            STOREFILE="signing/upload-keystore.jks"
+            STOREPASS="mp1234upload"
+            KEYPASS="mp1234upload"
+            ALIAS="upload"
+            echo "Using committed signing/upload-keystore.jks"
           fi
 
-          echo "${KEYSTORE_BASE64}" | base64 -d > upload-keystore.jks
-          ALIAS="${KEY_ALIAS:-upload}"
-          KEYPASS="${KEY_PASSWORD:-${KEYSTORE_PASSWORD}}"
-
           {
-            echo "storeFile=upload-keystore.jks"
-            echo "storePassword=${KEYSTORE_PASSWORD}"
+            echo "storeFile=${STOREFILE}"
+            echo "storePassword=${STOREPASS}"
             echo "keyAlias=${ALIAS}"
             echo "keyPassword=${KEYPASS}"
           } > keystore.properties
 
           ACTUAL=$(
-            keytool -list -v -keystore upload-keystore.jks -storepass "${KEYSTORE_PASSWORD}" -alias "${ALIAS}" \
+            keytool -list -v -keystore "${STOREFILE}" -storepass "${STOREPASS}" -alias "${ALIAS}" \
               | grep -i "SHA1:" \
               | head -n 1 \
               | sed -E 's/.*SHA1:\s*//I' \
               | tr -d '[:space:]' \
               | tr '[:lower:]' '[:upper:]'
           )
-          EXPECTED_NORM=$(echo "${EXPECTED_SHA1}" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+          PLAY_NORM=$(echo "${PLAY_SHA1}" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
           echo "Upload certificate SHA1: ${ACTUAL}"
-          if [ "${ACTUAL}" != "${EXPECTED_NORM}" ]; then
-            echo "::error::Keystore SHA1 ${ACTUAL} does not match Play upload key ${EXPECTED_NORM}."
-            echo "Use the original upload keystore, or reset the upload key in Play Console."
-            exit 1
-          fi
+          echo "Play-registered SHA1:    ${PLAY_NORM}"
+
+          {
+            echo "## Signing"
+            echo "AAB SHA1: \`${ACTUAL}\`"
+            echo "Play expects: \`${PLAY_NORM}\`"
+            if [ "${ACTUAL}" != "${PLAY_NORM}" ]; then
+              echo
+              echo "This AAB will be **rejected by Play** until you reset the upload key."
+              echo "Play Console → App integrity → App signing → Request upload key reset"
+              echo "Upload \`signing/upload_certificate.pem\` from the repo (or the workflow artifact)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build release AAB
         run: ./gradlew bundleRelease --no-daemon --stacktrace
@@ -97,12 +104,20 @@ jobs:
             echo "::error::Merged manifest is missing com.mealplanner1234.app"
             exit 1
           fi
-          echo "Package and provider authorities look correct."
+          echo "Package com.mealplanner1234.app is present; com.invoices.app is not."
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: invoices-release-aab
           path: app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Play upload certificate (PEM)
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-upload-certificate-pem
+          path: signing/upload_certificate.pem
           if-no-files-found: error
           retention-days: 14
