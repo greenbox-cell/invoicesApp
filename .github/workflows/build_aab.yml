@@ -35,7 +35,6 @@ jobs:
         run: chmod +x gradlew
 
       - name: Configure release signing
-        id: signing
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -43,53 +42,67 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "${KEYSTORE_BASE64}" ]; then
-            echo "${KEYSTORE_BASE64}" | base64 -d > upload-keystore.jks
-            {
-              echo "storeFile=upload-keystore.jks"
-              echo "storePassword=${KEYSTORE_PASSWORD}"
-              echo "keyAlias=${KEY_ALIAS:-upload}"
-              echo "keyPassword=${KEY_PASSWORD:-${KEYSTORE_PASSWORD}}"
-            } > keystore.properties
-            echo "generated_keystore=false" >> "$GITHUB_OUTPUT"
-            echo "Using KEYSTORE_BASE64 secret for signing."
-          else
-            keytool -genkeypair \
-              -keystore ci-upload-keystore.jks \
-              -storepass invoicesci \
-              -keypass invoicesci \
-              -alias upload \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Invoices, OU=Mobile, O=Invoices, L=Local, ST=NA, C=IL" \
-              -noprompt
-            {
-              echo "storeFile=ci-upload-keystore.jks"
-              echo "storePassword=invoicesci"
-              echo "keyAlias=upload"
-              echo "keyPassword=invoicesci"
-            } > keystore.properties
-            echo "generated_keystore=true" >> "$GITHUB_OUTPUT"
-            echo "No signing secrets found. Generated a CI keystore for this run."
+          EXPECTED_SHA1="0F:DF:FC:AF:28:9C:06:67:51:25:EE:93:B4:B2:F1:A4:BB:88:90:23"
+
+          if [ -z "${KEYSTORE_BASE64}" ] || [ -z "${KEYSTORE_PASSWORD}" ]; then
+            echo "::error::Play already registered upload key SHA1 ${EXPECTED_SHA1}."
+            echo "Do not generate a new keystore — Play will reject it."
+            echo "1. GitHub → Actions → the FIRST successful Build AAB run"
+            echo "2. Download artifact invoices-ci-upload-keystore"
+            echo "3. Verify: keytool -list -v -keystore ci-upload-keystore.jks -storepass invoicesci"
+            echo "4. Repo Settings → Secrets → Actions, add:"
+            echo "   KEYSTORE_BASE64, KEYSTORE_PASSWORD (invoicesci if from first CI run),"
+            echo "   KEY_ALIAS (upload), KEY_PASSWORD"
+            exit 1
+          fi
+
+          echo "${KEYSTORE_BASE64}" | base64 -d > upload-keystore.jks
+          ALIAS="${KEY_ALIAS:-upload}"
+          KEYPASS="${KEY_PASSWORD:-${KEYSTORE_PASSWORD}}"
+
+          {
+            echo "storeFile=upload-keystore.jks"
+            echo "storePassword=${KEYSTORE_PASSWORD}"
+            echo "keyAlias=${ALIAS}"
+            echo "keyPassword=${KEYPASS}"
+          } > keystore.properties
+
+          ACTUAL=$(
+            keytool -list -v -keystore upload-keystore.jks -storepass "${KEYSTORE_PASSWORD}" -alias "${ALIAS}" \
+              | grep -i "SHA1:" \
+              | head -n 1 \
+              | sed -E 's/.*SHA1:\s*//I' \
+              | tr -d '[:space:]' \
+              | tr '[:lower:]' '[:upper:]'
+          )
+          EXPECTED_NORM=$(echo "${EXPECTED_SHA1}" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+          echo "Upload certificate SHA1: ${ACTUAL}"
+          if [ "${ACTUAL}" != "${EXPECTED_NORM}" ]; then
+            echo "::error::Keystore SHA1 ${ACTUAL} does not match Play upload key ${EXPECTED_NORM}."
+            echo "Use the original upload keystore, or reset the upload key in Play Console."
+            exit 1
           fi
 
       - name: Build release AAB
         run: ./gradlew bundleRelease --no-daemon --stacktrace
+
+      - name: Verify package name and provider authorities
+        run: |
+          set -euo pipefail
+          if grep -R "com.invoices.app" app/build --include="AndroidManifest.xml"; then
+            echo "::error::Build still contains com.invoices.app — Play will reject the AAB."
+            exit 1
+          fi
+          if ! grep -R "com.mealplanner1234.app" app/build --include="AndroidManifest.xml" >/dev/null; then
+            echo "::error::Merged manifest is missing com.mealplanner1234.app"
+            exit 1
+          fi
+          echo "Package and provider authorities look correct."
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: invoices-release-aab
           path: app/build/outputs/bundle/release/*.aab
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload generated CI keystore
-        if: steps.signing.outputs.generated_keystore == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: invoices-ci-upload-keystore
-          path: ci-upload-keystore.jks
           if-no-files-found: error
           retention-days: 14
