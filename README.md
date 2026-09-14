@@ -105,7 +105,7 @@ If signing is missing, Gradle still compiles, but Play will reject an unsigned b
 
 ### 4. Upload to Play Console
 
-1. Create the app named **Invoices** with package name `com.invoices.app` (change `applicationId` in `app/build.gradle.kts` first if that id is taken).
+1. Create the app named **Invoices** with package name `com.mealplanner1234.app`.
 2. Host a **public Privacy Policy URL**. Copy `app/src/main/assets/privacy_policy.html` to GitHub Pages, your site, or any HTTPS host. Paste that URL into Play Console → App content → Privacy policy. The in-app WebView works offline; Play still requires a public URL.
 3. Complete Data safety: this app does **not** collect or share user data with a developer server. Invoices are stored only on device.
 4. Target audience: business / productivity, not children.
@@ -121,7 +121,7 @@ If signing is missing, Gradle still compiles, but Play will reject an unsigned b
 ## Project layout
 
 ```
-app/src/main/java/com/invoices/app/
+app/src/main/java/com/mealplanner1234/app/
   data/          Room entity, DAO, database, repository
   pdf/           A4 PDF writer + share sheet
   ui/            Compose screens (home, form, detail, settings)

@@ -14,11 +14,11 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.invoices.app"
+    namespace = "com.mealplanner1234.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.invoices.app"
+        applicationId = "com.mealplanner1234.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
