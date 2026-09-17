@@ -38,7 +38,7 @@ jobs:
           mkdir -p "$HOME/.android"
           touch "$HOME/.android/repositories.cfg"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" || true
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" || true
 
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
