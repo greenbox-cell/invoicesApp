@@ -1,5 +1,6 @@
 package com.mealplanner1234.app.pdf
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
@@ -15,6 +16,7 @@ object PdfShare {
         )
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "application/pdf"
+            clipData = ClipData.newRawUri(invoice.number, uri)
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, invoice.number)
             putExtra(Intent.EXTRA_TEXT, "Invoice ${invoice.number} for ${invoice.clientName}")

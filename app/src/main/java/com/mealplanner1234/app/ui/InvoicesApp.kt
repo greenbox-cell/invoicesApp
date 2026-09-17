@@ -1,12 +1,16 @@
 package com.mealplanner1234.app.ui
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -40,10 +44,10 @@ fun InvoicesApp(viewModel: InvoiceViewModel) {
     val showBottomBar = route == ROUTE_HOME || route == ROUTE_SETTINGS
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar {
+                NavigationBar(windowInsets = NavigationBarDefaults.windowInsets) {
                     NavigationBarItem(
                         selected = route == ROUTE_HOME,
                         onClick = { navController.navigateTab(ROUTE_HOME) },

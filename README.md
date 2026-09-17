@@ -12,17 +12,17 @@ This project is **native Kotlin + Jetpack Compose** (not Flutter). Flutter was n
 - Generate a one-page PDF and share it through the system share sheet
 - Room database on-device (`invoices.db`)
 - Settings → **Privacy Policy** opens an in-app WebView (`app/src/main/assets/privacy_policy.html`)
-- Target SDK **36**, min SDK **26**, no dangerous permissions
+- Target SDK **35** (Android 15), min SDK **26**, no dangerous permissions
 
 Bottom navigation: **Invoices** | **Settings**.
 
 ## Prerequisites
 
 1. **JDK 17 or 21** (this machine has `C:\Program Files\Java\jdk-21`)
-2. **Android SDK** with API 36 platform and Build-Tools  
+2. **Android SDK** with API 35 platform and Build-Tools  
    Install [Android Studio](https://developer.android.com/studio) and in SDK Manager install:
-   - Android SDK Platform 36
-   - Android SDK Build-Tools 36.x
+   - Android SDK Platform 35
+   - Android SDK Build-Tools 35.x
    - Android SDK Command-line Tools
 3. Set environment variables (PowerShell example):
 
